@@ -1,0 +1,935 @@
+<title>Context Architect</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a spec-sheet workbench. Two views: Workspace (brief → interview → prompt → follow-ups) and Library (every saved prompt, grouped by topic folder). Right rail = context map + recent prompts. */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#14212b; --muted:#5b6b78; --line:#d5dde4;
+  --accent:#0f6b63; --accent-ink:#ffffff; --accent-soft:#dcefeb;
+  --warn:#b26a00; --warn-soft:#fbeed6; --miss:#a9b5bf; --code-bg:#f6f8fa;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f161c; --panel:#162029; --ink:#e3eaf0; --muted:#93a3b0; --line:#2a3743;
+  --accent:#3fb8a9; --accent-ink:#06201d; --accent-soft:#163a37;
+  --warn:#f0b452; --warn-soft:#3a2c14; --miss:#4b5a66; --code-bg:#111a21; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f161c; --panel:#162029; --ink:#e3eaf0; --muted:#93a3b0; --line:#2a3743;
+  --accent:#3fb8a9; --accent-ink:#06201d; --accent-soft:#163a37;
+  --warn:#f0b452; --warn-soft:#3a2c14; --miss:#4b5a66; --code-bg:#111a21; color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:18px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,4vw,40px);line-height:1.05;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.tag{color:var(--muted);max-width:56ch;margin:6px 0 0}
+.steps{display:flex;gap:6px;list-style:none;margin:0;padding:0;flex-wrap:wrap}
+.steps li{font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:5px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.steps li.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.steps li.done{color:var(--accent);border-color:var(--accent)}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.tab{font:inherit;font-weight:600;background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:8px 14px;cursor:pointer;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.count{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--muted);margin-left:4px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:22px;align-items:start}
+@media (max-width:880px){.grid{grid-template-columns:minmax(0,1fr)}}
+.main,.view{display:flex;flex-direction:column;gap:18px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;min-width:0}
+.card h2{font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 14px;font-size:14px}
+label.lbl{display:block;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:0 0 6px;font-weight:600}
+textarea,input[type=text],input[type=search]{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:11px 12px}
+textarea{min-height:120px;resize:vertical}
+textarea.short{min-height:70px}
+textarea:focus,input:focus,select:focus,button:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:14px 18px;margin-top:14px}
+.row>div{flex:1 1 220px;min-width:0}
+select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+.examples{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center}
+.examples span{font-size:13px;color:var(--muted)}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:transparent;color:var(--ink);padding:5px 11px;border-radius:999px;cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--bg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.small{padding:6px 11px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.status{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+.err{color:var(--warn);font-size:14px;margin-top:10px}
+
+.understand{background:var(--accent-soft);border-radius:8px;padding:12px 14px;margin:0 0 16px}
+.understand b{display:block;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin-bottom:2px}
+.qs{display:flex;flex-direction:column;gap:18px}
+.q{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.q:first-child{border-top:0;padding-top:0}
+.qhead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.qhead strong{font-weight:600;font-size:16px}
+.slotpill{font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-weight:600}
+.why{color:var(--muted);font-size:13px;margin:0}
+.opts{display:flex;flex-wrap:wrap;gap:6px}
+
+.ptop{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;align-items:baseline}
+.crumb{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+pre.prompt{font-family:var(--mono);font-size:13.5px;line-height:1.6;background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:16px;white-space:pre-wrap;word-wrap:break-word;margin:0;max-height:70vh;overflow:auto;min-height:80px}
+.notes{margin:14px 0 0;padding-left:20px;color:var(--muted);font-size:14px}
+.notes li{margin-bottom:4px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.savechip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);max-width:100%;overflow-wrap:anywhere}
+.savechip[data-s="ok"]{border-color:var(--accent);color:var(--accent)}
+.savechip[data-s="warn"]{border-color:var(--warn);color:var(--warn)}
+.folderrow{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.folderrow>div{flex:1 1 200px;min-width:0}
+.versions{margin-top:16px}
+.versions summary{font-size:14px}
+.vlist{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.vlist li{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.vlist .vhead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;align-items:center}
+.vlist .vchange{font-size:14px}
+.vlist pre{font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-wrap:break-word;background:var(--code-bg);border-radius:6px;padding:10px;margin:0;max-height:180px;overflow:auto}
+
+.thread{display:flex;flex-direction:column;gap:14px;margin:4px 0 0}
+.turn{border-left:3px solid var(--line);padding:2px 0 2px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.turn .askd{font-weight:600}
+.turn .ans{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px}
+.turn .when{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.turn.live{border-left-color:var(--accent)}
+.next{display:flex;flex-wrap:wrap;gap:6px}
+.modes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+
+/* library */
+.libtools{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}
+.libtools>input{flex:2 1 240px;min-width:0}
+.libtools>select{flex:1 1 160px;width:auto;min-width:0}
+.group{margin-top:18px}
+.group h3{font-family:var(--display);font-size:15px;margin:0 0 6px;display:flex;align-items:baseline;gap:8px}
+.group h3 .meta{font-weight:400}
+.lrow{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)}
+.lrow .info{min-width:0;flex:1 1 240px;display:flex;flex-direction:column;gap:2px}
+.lrow .open{font:inherit;font-weight:600;background:none;border:0;padding:0;color:var(--ink);cursor:pointer;text-align:left;overflow-wrap:anywhere}
+.lrow .open:hover{color:var(--accent)}
+.lrow[aria-current="true"] .open{color:var(--accent)}
+.lrow .acts{display:flex;gap:6px;flex-wrap:wrap}
+.emptyline{font-size:13px;color:var(--muted);padding:8px 0;border-top:1px solid var(--line);margin:0}
+.libmsg{font-size:14px;color:var(--muted);margin:10px 0 0}
+
+aside{display:flex;flex-direction:column;gap:18px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+@media (max-width:880px){aside{position:static}}
+aside h3{font-family:var(--display);font-size:16px;margin:0 0 2px}
+.map ul{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.map li{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:center;font-size:14px}
+.map .sq{width:12px;height:12px;border-radius:3px;border:2px solid var(--miss)}
+.map li[data-s="partial"] .sq{border-color:var(--warn);background:linear-gradient(90deg,var(--warn) 50%,transparent 50%)}
+.map li[data-s="filled"] .sq{border-color:var(--accent);background:var(--accent)}
+.map .st{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.bar{height:6px;background:var(--line);border-radius:99px;margin-top:14px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
+.recent ul{list-style:none;margin:8px 0 0;padding:0}
+.recent li button{font:inherit;background:none;border:0;border-bottom:1px dashed var(--line);color:var(--ink);padding:8px 0;cursor:pointer;text-align:left;width:100%;display:flex;flex-direction:column;gap:1px}
+.recent li button:hover .t{color:var(--accent)}
+.recent .t{font-size:13.5px;overflow-wrap:anywhere}
+.recent .m{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.recent .path{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin:2px 0 0}
+.anywhere pre{font-family:var(--mono);font-size:12px;white-space:pre-wrap;background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:12px;max-height:220px;overflow:auto;margin:10px 0 0}
+details summary{cursor:pointer;font-weight:600}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Context Architect</h1>
+      <p class="tag">Tell it what you're trying to do. It interviews you about the gaps, writes a prompt with the full context, files it in a topic folder, and keeps going with revisions and follow-ups.</p>
+    </div>
+    <ol class="steps" id="steps" aria-label="Progress">
+      <li class="on">1 · Brief</li>
+      <li>2 · Interview</li>
+      <li>3 · Prompt</li>
+      <li>4 · Follow-ups</li>
+    </ol>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabWork" aria-selected="true" aria-controls="workView" type="button">Workspace</button>
+    <button class="tab" role="tab" id="tabLib" aria-selected="false" aria-controls="libView" type="button">Library<span class="count" id="libCount"></span></button>
+  </div>
+
+  <div class="grid">
+    <div class="main">
+      <!-- ============ WORKSPACE ============ -->
+      <div class="view" id="workView" role="tabpanel" aria-labelledby="tabWork">
+        <section class="card" id="briefCard">
+          <h2>What are you trying to do?</h2>
+          <p class="sub">Rough is fine. A sentence or two, plus anything you already know you want. To continue an older prompt, open it from the <button class="chip" type="button" id="toLib" style="padding:1px 8px">Library</button>.</p>
+          <label class="lbl" for="brief">Your goal</label>
+          <textarea id="brief" placeholder="e.g. I want a prompt that turns my messy meeting notes into a weekly update email for my manager."></textarea>
+          <div class="examples"><span>Try:</span>
+            <button class="chip ex" type="button">Write cold outreach emails for my freelance design business</button>
+            <button class="chip ex" type="button">A system prompt for a customer support bot for my SaaS app</button>
+            <button class="chip ex" type="button">Get a coding agent to refactor my Python scraper into a clean package</button>
+          </div>
+          <div class="row">
+            <div>
+              <label class="lbl" for="target">Where the prompt will run</label>
+              <select id="target">
+                <option value="auto">Let it decide</option>
+                <option value="chat">A chat assistant (Claude, ChatGPT, Gemini)</option>
+                <option value="system">System prompt for a bot or app</option>
+                <option value="agent">Coding agent (Claude Code, Cursor, Copilot)</option>
+                <option value="api">API call inside my code</option>
+                <option value="image">Image generator</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl" for="depth">Interview depth</label>
+              <select id="depth">
+                <option value="quick">Quick · 3–4 questions</option>
+                <option value="balanced" selected>Balanced · 5–6 questions</option>
+                <option value="deep">Deep · 7–8 questions</option>
+              </select>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" id="startBtn" type="button">Start the interview</button>
+            <button class="btn ghost" id="skipBtn" type="button">Skip questions, build now</button>
+            <div class="status" id="briefStatus" hidden><span class="dot"></span><span>Reading your brief…</span><button class="btn ghost small" type="button" data-stop>Stop</button></div>
+          </div>
+          <div class="err" id="briefErr" hidden></div>
+        </section>
+
+        <section class="card" id="qCard" hidden>
+          <h2 id="qTitle">A few questions</h2>
+          <p class="sub">Pick an option, write your own, or leave it blank to let the prompt make a sensible default.</p>
+          <div class="understand"><b>What I understand so far</b><span id="summary"></span></div>
+          <div class="qs" id="qs"></div>
+          <div class="actions">
+            <button class="btn primary" id="buildBtn" type="button">Build my prompt</button>
+            <button class="btn ghost" id="moreBtn" type="button">Ask me more</button>
+            <div class="status" id="qStatus" hidden><span class="dot"></span><span>Thinking…</span><button class="btn ghost small" type="button" data-stop>Stop</button></div>
+          </div>
+          <div class="err" id="qErr" hidden></div>
+        </section>
+
+        <section class="card" id="pCard" hidden>
+          <div class="ptop"><h2 id="pTitle">Your prompt</h2><span class="crumb" id="crumb"></span></div>
+          <p class="sub">Anything in <code>{{double_braces}}</code> is a slot to fill each time you use it.</p>
+          <pre class="prompt" id="prompt" tabindex="0"></pre>
+          <div class="actions">
+            <button class="btn primary" id="copyBtn" type="button">Copy prompt</button>
+            <span class="meta" id="pMeta"></span>
+            <div class="status" id="pStatus" hidden><span class="dot"></span><span>Writing…</span><button class="btn ghost small" type="button" data-stop>Stop</button></div>
+          </div>
+          <ul class="notes" id="notes"></ul>
+
+          <div class="folderrow">
+            <div>
+              <label class="lbl" for="folderSel">Save in folder</label>
+              <select id="folderSel"></select>
+            </div>
+            <div id="newFolderWrap" hidden>
+              <label class="lbl" for="newFolder">New folder name</label>
+              <input type="text" id="newFolder" placeholder="e.g. Marketing" maxlength="60">
+            </div>
+            <button class="btn" id="saveBtn" type="button">Save to folder</button>
+          </div>
+          <div class="actions" style="margin-top:10px"><span class="savechip" id="saveChip" hidden></span></div>
+
+          <div style="margin-top:18px">
+            <label class="lbl" for="refine">Revise the prompt</label>
+            <input type="text" id="refine" placeholder="e.g. make it shorter, add two examples, output as a table, sound less formal">
+            <div class="actions">
+              <button class="btn" id="refineBtn" type="button">Revise</button>
+              <button class="btn ghost" id="restartBtn" type="button">Start a new prompt</button>
+            </div>
+          </div>
+          <details class="versions" id="versions" hidden>
+            <summary id="vSummary">Earlier versions</summary>
+            <ul class="vlist" id="vlist"></ul>
+          </details>
+          <div class="err" id="pErr" hidden></div>
+        </section>
+
+        <section class="card" id="fCard" hidden>
+          <h2>Follow-ups</h2>
+          <p class="sub">Keep digging into this task as many times as you like. Each answer knows the brief, your interview answers, the current prompt and every earlier follow-up, and it's saved with the prompt.</p>
+          <div class="thread" id="thread"></div>
+          <div style="margin-top:16px">
+            <div class="modes" role="group" aria-label="Kind of follow-up">
+              <button class="chip mode" type="button" data-mode="research" aria-pressed="true">Research deeper</button>
+              <button class="chip mode" type="button" data-mode="variant" aria-pressed="false">New variant prompt</button>
+              <button class="chip mode" type="button" data-mode="test" aria-pressed="false">Stress-test the prompt</button>
+              <button class="chip mode" type="button" data-mode="next" aria-pressed="false">Next-step prompt</button>
+            </div>
+            <label class="lbl" for="fInput">Your follow-up</label>
+            <textarea id="fInput" class="short" placeholder="e.g. What are the best subject-line patterns for this audience? / How would this change for LinkedIn messages?"></textarea>
+            <div class="actions">
+              <button class="btn primary" id="fBtn" type="button">Ask follow-up</button>
+              <div class="status" id="fStatus" hidden><span class="dot"></span><span>Thinking…</span><button class="btn ghost small" type="button" data-stop>Stop</button></div>
+            </div>
+            <div class="err" id="fErr" hidden></div>
+          </div>
+        </section>
+
+        <section class="card" id="unavail" hidden>
+          <h2>Open this page in Claude to run the interview</h2>
+          <p class="sub" style="margin:0">The interviewer runs on your Claude account, and it isn't reachable from here. You can still copy the interviewer instructions below into any chat assistant.</p>
+        </section>
+
+        <section class="card anywhere">
+          <details>
+            <summary>Use the interviewer anywhere</summary>
+            <p class="sub" style="margin:8px 0 0">Paste this into any chat assistant to get the same question-then-prompt flow there.</p>
+            <pre id="meta"></pre>
+            <div class="actions"><button class="btn ghost" id="copyMeta" type="button">Copy instructions</button></div>
+          </details>
+        </section>
+      </div>
+
+      <!-- ============ LIBRARY ============ -->
+      <div class="view" id="libView" role="tabpanel" aria-labelledby="tabLib" hidden>
+        <section class="card">
+          <h2>Library</h2>
+          <p class="sub">Every prompt you've saved, by folder. Pick one to revise it or keep researching with follow-ups. Changes are saved back to the same prompt, and earlier versions are kept.</p>
+          <div class="libtools">
+            <input type="search" id="libSearch" placeholder="Search titles and folders…" aria-label="Search saved prompts">
+            <select id="libFolder" aria-label="Filter by folder"><option value="">All folders</option></select>
+            <button class="btn ghost small" id="refreshBtn" type="button">Refresh</button>
+          </div>
+          <p class="meta" id="libPath">Your prompts folder</p>
+          <p class="libmsg" id="libMsg">Loading your folder…</p>
+          <div id="libList"></div>
+        </section>
+      </div>
+    </div>
+
+    <aside>
+      <section class="card map">
+        <h3>Context map</h3>
+        <p class="sub" style="margin:0;font-size:13px">What a model needs to do this well, and how much of it you've given.</p>
+        <ul id="map"></ul>
+        <div class="bar"><i id="barFill"></i></div>
+        <p class="meta" id="mapMeta" style="margin:6px 0 0">0 of 7 covered</p>
+      </section>
+      <section class="card recent">
+        <h3>Recent prompts</h3>
+        <p class="path" id="recentPath">Your prompts folder</p>
+        <ul id="recentList"></ul>
+        <div class="actions" style="margin-top:10px"><button class="btn ghost small" id="openLib" type="button">Open library</button></div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+const SLOTS = [
+  ["goal","Goal"],["audience","Audience & user"],["inputs","Inputs & materials"],
+  ["constraints","Constraints"],["format","Output format"],["examples","Tone & examples"],["success","Success criteria"]
+];
+const TARGETS = {auto:"Not specified; infer the best fit.",chat:"A general chat assistant (Claude, ChatGPT, Gemini).",system:"A system prompt for a deployed bot or app.",agent:"A coding agent working in a repository (Claude Code, Cursor, Copilot).",api:"A single API call inside the user's code, where inputs are injected as variables.",image:"An image generation model."};
+const TARGET_SHORT = {auto:"auto",chat:"chat",system:"system prompt",agent:"coding agent",api:"API",image:"image"};
+const DEPTH = {quick:"3 to 4",balanced:"5 to 6",deep:"7 to 8"};
+const MODES = {
+  research:"Research deeper: answer the question with concrete, specific, practical depth for this exact task (patterns, options, trade-offs, pitfalls, examples). Do not rewrite the prompt unless asked.",
+  variant:"New variant prompt: write a complete new prompt that adapts the current one as the person asks (another channel, audience, length, model). Put the full variant prompt inside a ~~~ fenced block.",
+  test:"Stress-test the prompt: list the most likely ways a model would misread or fail it on realistic inputs, show 2-3 tricky test inputs, and give exact edits that fix each weakness.",
+  next:"Next-step prompt: write the prompt for the logical next step in this person's workflow (what they'll need after this output), inside a ~~~ fenced block, with one line on when to use it."
+};
+const MODE_LABEL = {research:"Research deeper",variant:"New variant prompt",test:"Stress-test",next:"Next-step prompt"};
+const FOLDER_SRV = "host:context-folder";
+const NOTE_MARK = "<<<NOTES>>>", NEXT_MARK = "<<<NEXT>>>";
+const SEG_RE = /^[A-Za-z0-9][A-Za-z0-9 ._&()-]{0,79}$/;
+
+const $ = id => document.getElementById(id);
+function blank(){ return { id:"", name:"", folder:"", path:"", title:"", brief:"", target:"auto", depth:"balanced", rounds:[], slots:{}, prompt:"", notes:[], change:"", versions:[], followups:[], created:"", updated:"" }; }
+const S = blank();
+let sample = null, mcp = null, ctl = null, mode = "research";
+let LIB = { root:"Your prompts folder", folders:[], prompts:[], source:"loading" };
+
+/* ---------- small helpers ---------- */
+const smooth = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+const rid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+function fmtTime(iso){ if(!iso) return ""; try{ return new Date(iso).toLocaleString([], {dateStyle:"medium", timeStyle:"short"}); }catch{ return iso; } }
+function slug(s){ return (s||"prompt").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,48) || "prompt"; }
+function cleanFolder(s){
+  const v = String(s||"").replace(/[^A-Za-z0-9 ._&()-]/g," ").replace(/\s+/g," ").trim().replace(/^[^A-Za-z0-9]+/,"").replace(/[. ]+$/,"").slice(0,40);
+  return v || "General";
+}
+function renderMap(){
+  const ul = $("map"); ul.textContent = ""; let score = 0;
+  for (const [k,label] of SLOTS){
+    const s = S.slots[k] || "missing";
+    score += s==="filled"?1:s==="partial"?.5:0;
+    const li = document.createElement("li"); li.dataset.s = s;
+    li.innerHTML = '<span class="sq"></span><span></span><span class="st"></span>';
+    li.children[1].textContent = label; li.children[2].textContent = s;
+    ul.append(li);
+  }
+  $("barFill").style.width = (score/SLOTS.length*100)+"%";
+  $("mapMeta").textContent = (Math.round(score*2)/2)+" of "+SLOTS.length+" covered";
+}
+function setStep(i){ document.querySelectorAll("#steps li").forEach((li,j)=>{li.className = j<i?"done":j===i?"on":"";}); }
+
+/* ---------- tabs ---------- */
+function showTab(which){
+  const lib = which==="lib";
+  $("workView").hidden = lib; $("libView").hidden = !lib;
+  $("tabWork").setAttribute("aria-selected", String(!lib)); $("tabLib").setAttribute("aria-selected", String(lib));
+  if(lib) renderLibrary();
+}
+$("tabWork").onclick=()=>showTab("work");
+$("tabLib").onclick=()=>showTab("lib");
+$("toLib").onclick=()=>showTab("lib");
+$("openLib").onclick=()=>{ showTab("lib"); $("libSearch").focus(); };
+
+/* ---------- busy / errors ---------- */
+function busy(statusId, on, text){
+  const el=$(statusId); el.hidden=!on;
+  if(text){ const t=el.querySelector("span:not(.dot)"); if(t) t.textContent=text; }
+  document.querySelectorAll(".btn:not([data-stop])").forEach(b=>b.disabled=on);
+}
+function errCopy(e){
+  switch(e && e.code){
+    case "cancelled": return "";
+    case "not_granted": case "sampling_disabled": case "not_declared": case "capability_disabled": return "Claude isn't allowed for this page, so this can't run. Use the copyable instructions at the bottom instead.";
+    case "rate_limited": return "You've hit a usage limit. Wait a bit, then try again.";
+    case "session_expired": return "Your Claude session expired. Sign in again, then retry.";
+    case "refused": return "Claude declined this request. Try rewording it.";
+    case "invalid_json": return "The questions came back garbled. Press the button again.";
+    case "prompt_too_large": return "That's too much text. Shorten your brief, answers or follow-ups.";
+    default: return "Something went wrong reaching Claude. Try again.";
+  }
+}
+function showErr(id, e){ const m=errCopy(e); const el=$(id); el.textContent=m; el.hidden=!m; }
+document.addEventListener("click", ev=>{ if(ev.target.closest("[data-stop]")) ctl?.abort(); });
+
+/* ---------- prompts sent to Claude ---------- */
+function contextBlock(){
+  let s = `<brief>\n${S.brief}\n</brief>\n<target>${TARGETS[S.target]||TARGETS.auto}</target>\n`;
+  S.rounds.forEach((r,i)=>{
+    const qa = r.questions.map(q=>`Q (${q.slot}): ${q.question}\nA: ${r.answers[q.id] || "(skipped: use a sensible default)"}`).join("\n\n");
+    if(qa) s += `<interview_round n="${i+1}">\n${qa}\n</interview_round>\n`;
+  });
+  return s;
+}
+function interviewPrompt(){
+  const first = S.rounds.length===0;
+  const folders = LIB.folders.length ? LIB.folders.join(", ") : "none yet";
+  return `You are a context engineer. Your job is to interview a person so you can later write them an excellent, context-rich prompt for an AI model. Right now you only ask questions; you do not write the prompt.
+
+${contextBlock()}
+Assess what a model would need to do this task really well, across these context slots:
+goal (what outcome, and why), audience (who the output is for / who the bot talks to), inputs (materials, data, or variables the model will receive), constraints (length, must/must-not, scope, tools, policies), format (structure of the output), examples (tone, style, reference examples), success (how the person will judge a good result).
+
+${first ? `Ask ${DEPTH[S.depth]} questions` : "Ask at most 4 follow-up questions, only about what is still unclear or would change the prompt meaningfully. Ask 0 if you have enough"} targeting the slots that are missing or vague and would most change the final prompt. Never ask about something already answered. Questions must be specific to this person's task, not generic. For each, offer 2 to 5 short, concrete answer options that a typical person in this situation would pick from (the person can also write their own). Set "multi" true when several options can apply together.
+
+Reply with only JSON in this shape:
+{"summary":"2-3 sentences restating what they're trying to do, in plain words, addressed to them as 'you'","title":"3-6 word name for this prompt","folder":"topic folder to file it in, 1-3 words in Title Case, plain letters only. Reuse one of these existing folders if it fits: ${folders}","task_type":"short label","slots":{"goal":"filled|partial|missing","audience":"...","inputs":"...","constraints":"...","format":"...","examples":"...","success":"..."},"questions":[{"id":"q1","slot":"audience","question":"...","why":"one short sentence on how the answer changes the prompt","options":["...","..."],"multi":false}],"ready":false}
+"ready" is true when you could write a strong prompt now.`;
+}
+function buildPrompt(){
+  return `You are an expert context engineer. Write the final prompt this person will paste into an AI model.
+
+${contextBlock()}
+Principles:
+- Put the model in the right frame: a specific role grounded in the domain, plus the background and purpose behind the task (why it matters, who it's for).
+- Give it all the context gathered above, organized so it is easy to scan. For Claude-family or general LLM targets, wrap distinct parts in XML tags (e.g. <context>, <task>, <constraints>, <output_format>, <examples>). For image generators, write a single dense descriptive prompt plus a short negative prompt instead.
+- State the task as clear, ordered steps when order matters. Say what to do, not only what to avoid; give the reason behind non-obvious rules.
+- Specify the output format precisely, and how to handle missing or ambiguous input (ask, or state assumptions).
+- Use {{double_brace}} placeholders for anything that changes per use (the person's notes, a customer message, a file).
+- Include a short example only when it clarifies style or format; mark it as illustrative.
+- Where answers were skipped, choose sensible defaults and state them inside the prompt so they're easy to edit.
+- No filler, no flattery, no "You are a helpful assistant". Write in second person to the model.
+
+Output exactly this, with nothing before or after:
+the full prompt text
+${NOTE_MARK}
+3-5 short lines, each starting with "- ", telling the person what to fill in, which defaults you assumed, and one tip for getting better results.`;
+}
+function followupBlock(keep){
+  const f = S.followups.slice(-keep);
+  if(!f.length) return "";
+  return "\n<earlier_followups>\n" + f.map(x=>`<followup kind="${x.mode}">\nQ: ${x.q}\nA: ${String(x.a).slice(0,4000)}\n</followup>`).join("\n") + "\n</earlier_followups>\n";
+}
+function revisePrompt(change){
+  const hist = S.versions.slice(-4).map((v,i)=>`- ${v.change||"earlier version"}`).join("\n");
+  return `You are an expert context engineer. Revise this prompt according to the person's request. Keep everything that still applies; change only what the request implies.
+
+${contextBlock()}${followupBlock(4)}${hist ? `\n<earlier_revision_requests>\n${hist}\n</earlier_revision_requests>\n` : ""}
+<current_prompt>
+${S.prompt}
+</current_prompt>
+<change_request>${change}</change_request>
+
+Output exactly this, with nothing before or after:
+the full revised prompt text
+${NOTE_MARK}
+2-4 short lines, each starting with "- ", saying what you changed.`;
+}
+function followupPrompt(q, m){
+  return `You are a context engineer and research partner helping a person go deeper on a task they built a prompt for. Continue the work; build on earlier follow-ups rather than repeating them.
+
+${contextBlock()}
+<current_prompt>
+${S.prompt}
+</current_prompt>${followupBlock(8)}
+<new_followup kind="${m}">${q}</new_followup>
+
+How to answer: ${MODES[m]}
+Be specific to this person's situation. Use short paragraphs or lists; plain text, no markdown headings.
+
+After your answer, output a line with exactly ${NEXT_MARK} and then 3 short follow-up questions (one per line, no numbering) the person would most benefit from asking next.`;
+}
+
+/* ---------- interview ---------- */
+async function runInterview(){
+  const first = S.rounds.length===0;
+  const status = first ? "briefStatus" : "qStatus", errId = first ? "briefErr" : "qErr";
+  if(!first) collectAnswers();
+  $(errId).hidden=true;
+  busy(status,true, first ? "Reading your brief…" : "Looking for remaining gaps…");
+  ctl = new AbortController();
+  try{
+    const a = await sample.json(interviewPrompt(), {signal:ctl.signal, modelTier:"default"});
+    if(!a || typeof a!=="object") throw {code:"invalid_json"};
+    S.slots = Object.assign({}, S.slots, a.slots || {});
+    if(a.title && !S.title) S.title = String(a.title).slice(0,80);
+    if(a.folder && !S.folder) S.folder = cleanFolder(a.folder);
+    const qs = Array.isArray(a.questions) ? a.questions.filter(q=>q && q.question).slice(0,8) : [];
+    qs.forEach((q,i)=>{ q.id = "r"+S.rounds.length+"_"+(q.id||i); q.options = Array.isArray(q.options)?q.options.map(String).slice(0,6):[]; });
+    S.rounds.push({questions:qs, answers:{}, summary:String(a.summary||""), ready:!!a.ready});
+    renderMap(); renderQuestions(true); setStep(1); saveDraft();
+  }catch(e){ showErr(errId,e); }
+  finally{ busy(status,false); }
+}
+function renderQuestions(scroll){
+  const r = S.rounds[S.rounds.length-1]; if(!r) { $("qCard").hidden=true; return; }
+  $("qCard").hidden=false;
+  $("summary").textContent = r.summary;
+  $("qTitle").textContent = !r.questions.length ? "I have what I need" : S.rounds.length===1 ? "A few questions" : "A few more questions";
+  const box=$("qs"); box.textContent="";
+  if(!r.questions.length){ const p=document.createElement("p"); p.className="why"; p.textContent="No more questions. Build the prompt whenever you're ready."; box.append(p); }
+  for(const q of r.questions){
+    const d=document.createElement("div"); d.className="q"; d.dataset.id=q.id;
+    const head=document.createElement("div"); head.className="qhead";
+    const st=document.createElement("strong"); st.textContent=q.question;
+    const pill=document.createElement("span"); pill.className="slotpill"; pill.textContent=(SLOTS.find(s=>s[0]===q.slot)||[0,q.slot||"context"])[1];
+    head.append(st,pill); d.append(head);
+    if(q.why){ const why=document.createElement("p"); why.className="why"; why.textContent=q.why; d.append(why); }
+    const prev = r.answers[q.id] || "";
+    if(q.options.length){
+      const opts=document.createElement("div"); opts.className="opts";
+      for(const o of q.options){
+        const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=o;
+        b.setAttribute("aria-pressed", String(prev.split("; ").includes(o)));
+        b.onclick=()=>{ const on=b.getAttribute("aria-pressed")!=="true";
+          if(!q.multi) opts.querySelectorAll(".chip").forEach(c=>c.setAttribute("aria-pressed","false"));
+          b.setAttribute("aria-pressed",String(on)); };
+        opts.append(b);
+      }
+      d.append(opts);
+    }
+    const inp=document.createElement("input"); inp.type="text"; inp.id="ans_"+q.id; inp.placeholder= q.options.length? "Or in your own words…" : "Your answer…";
+    inp.value = prev.split("; ").filter(x=>!q.options.includes(x)).join("; ");
+    d.append(inp); box.append(d);
+  }
+  $("moreBtn").hidden = !r.questions.length;
+  if(scroll) $("qCard").scrollIntoView({behavior:smooth(), block:"start"});
+}
+function collectAnswers(){
+  const r = S.rounds[S.rounds.length-1]; if(!r) return;
+  document.querySelectorAll("#qs .q").forEach(d=>{
+    const picked=[...d.querySelectorAll('.chip[aria-pressed="true"]')].map(c=>c.textContent);
+    const own=d.querySelector("input").value.trim();
+    const v=[...picked, own].filter(Boolean).join("; ");
+    if(v) r.answers[d.dataset.id]=v; else delete r.answers[d.dataset.id];
+  });
+}
+
+/* ---------- build / revise ---------- */
+async function runBuild(kind){
+  let input, change="";
+  if(kind==="revise"){
+    change=$("refine").value.trim(); if(!change){ $("refine").focus(); return; }
+    input=revisePrompt(change);
+  } else { collectAnswers(); input=buildPrompt(); }
+  showTab("work");
+  $("pCard").hidden=false; setStep(2);
+  ["briefErr","qErr","pErr"].forEach(i=>$(i).hidden=true);
+  const pre=$("prompt");
+  const old={prompt:S.prompt, notes:S.notes.slice(), change:S.change, at:S.updated};
+  pre.textContent="Thinking…"; $("notes").textContent="";
+  $("pCard").scrollIntoView({behavior:smooth(), block:"start"});
+  busy("pStatus",true, kind==="revise"?"Revising…":"Writing your prompt…");
+  ctl=new AbortController();
+  try{
+    const {text,truncated}=await sample(input,{signal:ctl.signal, modelTier:"complex", cache:false,
+      onText:({text})=>{ pre.textContent = text.split(NOTE_MARK)[0].trimEnd(); }});
+    const [p,n=""]=text.split(NOTE_MARK);
+    if(old.prompt) S.versions.push({prompt:old.prompt, notes:old.notes, change:old.change||"First version", at:old.at||new Date().toISOString()});
+    S.prompt=p.trim(); S.notes=n.split("\n").map(l=>l.replace(/^\s*[-•*]\s*/,"").trim()).filter(Boolean);
+    S.change = kind==="revise" ? change : (old.prompt ? "Rebuilt from interview answers" : "");
+    if(!S.title) S.title = S.brief.split(/\s+/).slice(0,7).join(" ");
+    if(!S.folder) S.folder = "General";
+    renderPrompt(truncated); renderFolderSel();
+    if(kind==="revise") $("refine").value="";
+    $("fCard").hidden=false;
+    await saveSession(false);
+  }catch(e){
+    if(e && e.code==="cancelled" && e.text) pre.textContent=e.text.split(NOTE_MARK)[0];
+    else if(old.prompt){ renderPrompt(); } else pre.textContent="";
+    showErr("pErr",e);
+  }finally{ busy("pStatus",false); }
+}
+function renderPrompt(truncated){
+  $("pTitle").textContent = S.title || "Your prompt";
+  $("prompt").textContent=S.prompt;
+  const ul=$("notes"); ul.textContent=""; S.notes.forEach(n=>{const li=document.createElement("li"); li.textContent=n; ul.append(li);});
+  const v = S.versions.length+1;
+  $("pMeta").textContent = S.prompt ? `v${v} · ${S.prompt.split(/\s+/).length} words`+(truncated?" · cut short, ask for a shorter version":"") : "";
+  $("crumb").textContent = S.path ? S.path.replace("/", " / ") : (S.folder ? S.folder+" / (not saved yet)" : "");
+  renderVersions();
+}
+function renderVersions(){
+  const n=S.versions.length; $("versions").hidden=!n;
+  $("vSummary").textContent = `Earlier versions (${n})`;
+  const ul=$("vlist"); ul.textContent="";
+  S.versions.map((v,i)=>({v,i})).reverse().forEach(({v,i})=>{
+    const li=document.createElement("li");
+    const head=document.createElement("div"); head.className="vhead";
+    const left=document.createElement("div");
+    const ch=document.createElement("div"); ch.className="vchange"; ch.textContent=`v${i+1} · ${v.change||"Earlier version"}`;
+    const m=document.createElement("div"); m.className="meta"; m.textContent=fmtTime(v.at);
+    left.append(ch,m);
+    const acts=document.createElement("div"); acts.className="actions"; acts.style.marginTop="0";
+    const cp=document.createElement("button"); cp.type="button"; cp.className="btn ghost small"; cp.textContent="Copy";
+    cp.onclick=e=>copyText(v.prompt, e.currentTarget, "Copy", pre);
+    const rs=document.createElement("button"); rs.type="button"; rs.className="btn ghost small"; rs.textContent="Restore";
+    rs.onclick=()=>{ const cur={prompt:S.prompt, notes:S.notes, change:S.change||"First version", at:S.updated};
+      S.versions.splice(i,1); S.versions.push(cur);
+      S.prompt=v.prompt; S.notes=v.notes||[]; S.change=`Restored v${i+1} (${v.change||"earlier version"})`;
+      renderPrompt(); saveSession(true); };
+    acts.append(cp,rs); head.append(left,acts);
+    const pre=document.createElement("pre"); pre.textContent=v.prompt;
+    li.append(head,pre); ul.append(li);
+  });
+}
+
+/* ---------- follow-ups ---------- */
+document.querySelectorAll(".mode").forEach(b=>b.onclick=()=>{
+  mode=b.dataset.mode; document.querySelectorAll(".mode").forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
+});
+function turnEl(f, live){
+  const d=document.createElement("div"); d.className="turn"+(live?" live":"");
+  const w=document.createElement("span"); w.className="when"; w.textContent=(MODE_LABEL[f.mode]||f.mode)+" · "+fmtTime(f.at);
+  const q=document.createElement("div"); q.className="askd"; q.textContent=f.q;
+  const a=document.createElement("div"); a.className="ans"; a.textContent=f.a||"Thinking…";
+  d.append(w,q,a);
+  if(f.next?.length){
+    const nx=document.createElement("div"); nx.className="next";
+    f.next.forEach(t=>{ const c=document.createElement("button"); c.type="button"; c.className="chip"; c.textContent=t;
+      c.onclick=()=>{ $("fInput").value=t; $("fInput").focus(); }; nx.append(c); });
+    d.append(nx);
+  }
+  if(f.a && !live){
+    const acts=document.createElement("div"); acts.className="actions"; acts.style.marginTop="2px";
+    const fold=document.createElement("button"); fold.type="button"; fold.className="btn ghost small"; fold.textContent="Fold into prompt";
+    fold.onclick=()=>{ $("refine").value="Incorporate what we learned in this follow-up: "+f.q; runBuild("revise"); };
+    const cp=document.createElement("button"); cp.type="button"; cp.className="btn ghost small"; cp.textContent="Copy answer";
+    cp.onclick=e=>copyText(f.a, e.currentTarget, "Copy answer", a);
+    acts.append(fold, cp); d.append(acts);
+  }
+  d._ans=a; return d;
+}
+function renderThread(){ const t=$("thread"); t.textContent=""; S.followups.forEach(f=>t.append(turnEl(f))); }
+async function runFollowup(){
+  const q=$("fInput").value.trim(); if(!q){ $("fInput").focus(); return; }
+  if(!S.prompt){ $("fErr").textContent="Build a prompt first."; $("fErr").hidden=false; return; }
+  $("fErr").hidden=true; setStep(3);
+  const f={q, mode, a:"", next:[], at:new Date().toISOString()};
+  const el=turnEl(f,true); $("thread").append(el);
+  busy("fStatus",true,"Thinking…"); ctl=new AbortController();
+  try{
+    const {text}=await sample(followupPrompt(q,mode),{signal:ctl.signal, modelTier:"default", cache:false,
+      onText:({text})=>{ el._ans.textContent=text.split(NEXT_MARK)[0].trimEnd(); }});
+    const [ans,nx=""]=text.split(NEXT_MARK);
+    f.a=ans.trim(); f.next=nx.split("\n").map(s=>s.replace(/^\s*[-•*\d.)]+\s*/,"").trim()).filter(Boolean).slice(0,3);
+    S.followups.push(f); $("fInput").value="";
+    renderThread(); await saveSession(false);
+    $("thread").lastElementChild?.scrollIntoView({behavior:smooth(), block:"nearest"});
+  }catch(e){ el.remove(); showErr("fErr",e); }
+  finally{ busy("fStatus",false); }
+}
+
+/* ---------- folder picker ---------- */
+function folderNames(){ return [...new Set(["General", ...LIB.folders, S.folder].filter(Boolean))].sort((a,b)=>a.localeCompare(b)); }
+function renderFolderSel(){
+  const sel=$("folderSel"); sel.textContent="";
+  for(const f of folderNames()){ const o=document.createElement("option"); o.value=f; o.textContent=f; sel.append(o); }
+  const n=document.createElement("option"); n.value="__new"; n.textContent="+ New folder…"; sel.append(n);
+  sel.value = S.folder || "General";
+  $("newFolderWrap").hidden = true;
+}
+$("folderSel").addEventListener("change", ()=>{
+  const v=$("folderSel").value;
+  if(v==="__new"){ $("newFolderWrap").hidden=false; $("newFolder").focus(); setChip("", "Name the folder, then click Save to folder"); return; }
+  $("newFolderWrap").hidden=true;
+  if(v!==S.folder){ S.folder=v; if(S.prompt) saveSession(true); }
+});
+$("newFolder").addEventListener("keydown", e=>{ if(e.key==="Enter") saveSession(true); });
+$("saveBtn").onclick=()=>saveSession(true);
+
+/* ---------- saving (host MCP server) ---------- */
+function toMarkdown(){
+  const L=[];
+  L.push(`# ${S.title||"Untitled prompt"}`,"",`- Folder: ${S.folder}`,`- Created: ${fmtTime(S.created)}`,`- Updated: ${fmtTime(S.updated)}`,`- Target: ${TARGETS[S.target]||S.target}`,`- Version: v${S.versions.length+1}${S.change?` (${S.change})`:""}`,"","## Brief","",S.brief,"");
+  const r=S.rounds[S.rounds.length-1]; if(r?.summary) L.push("## What it understood","",r.summary,"");
+  const qa=S.rounds.flatMap(r=>r.questions.map(q=>`- **${q.question}**\n  ${r.answers[q.id]||"_(skipped)_"}`));
+  if(qa.length) L.push("## Interview","",...qa,"");
+  L.push("## Prompt","","~~~~text",S.prompt,"~~~~","");
+  if(S.notes.length) L.push("## Notes","",...S.notes.map(n=>"- "+n),"");
+  if(S.followups.length){
+    L.push("## Follow-ups","");
+    S.followups.forEach((f,i)=>{ L.push(`### ${i+1}. ${f.q}`,"",`_${MODE_LABEL[f.mode]||f.mode} · ${fmtTime(f.at)}_`,"",f.a,""); });
+  }
+  if(S.versions.length){
+    L.push("## Earlier versions","");
+    S.versions.map((v,i)=>({v,i})).reverse().forEach(({v,i})=>{ L.push(`### v${i+1} · ${v.change||"Earlier version"}`,"",`_${fmtTime(v.at)}_`,"","~~~~text",v.prompt,"~~~~",""); });
+  }
+  return L.join("\n");
+}
+function setChip(state, text){ const c=$("saveChip"); c.hidden=!text; c.dataset.s=state||""; c.textContent=text||""; }
+function folderErrCopy(e){
+  switch(e && e.code){
+    case "server_not_connected": return "Folder not connected. Open this page in the Claude desktop app with the context-folder server added.";
+    case "not_in_manifest": return "Folder access is off for this page. Turn it on in the page's Permissions menu.";
+    case "cancelled": case "approval_required": return "Not saved yet · click Save to folder and approve it";
+    case "tool_error": return "The folder refused the save: " + (e.message||"unknown reason");
+    default: return "Couldn't reach the folder. Your work is kept in this browser.";
+  }
+}
+function uniqueName(folder, base){
+  const taken = new Set(LIB.prompts.filter(p=>p.folder===folder && p.path!==S.path).map(p=>p.name));
+  let n=base, i=2; while(taken.has(n)) n = base+"-"+(i++); return n;
+}
+async function saveSession(fromClick){
+  if(!S.prompt) return;
+  let folder = $("folderSel").value;
+  if(folder==="__new"){
+    const raw=$("newFolder").value.trim();
+    if(!raw){ setChip("warn","Type a name for the new folder first."); $("newFolder").focus(); return; }
+    folder = cleanFolder(raw);
+  }
+  folder = folder || S.folder || "General";
+  if(!SEG_RE.test(folder)){ setChip("warn","Folder names can use letters, digits, spaces, dots, dashes, & and ()."); return; }
+  S.folder = folder;
+  const now=new Date().toISOString();
+  if(!S.created) S.created=now; S.updated=now; if(!S.id) S.id=rid();
+  if(!S.name) S.name = uniqueName(folder, S.created.slice(0,10)+"-"+slug(S.title||S.brief));
+  saveLocal();
+  if(!mcp){ setChip("warn","Saved in this browser only · folder saving needs the Claude desktop app"); return; }
+  setChip("", fromClick ? "Waiting for your approval in the Claude app…" : "Saving to folder…");
+  const record = JSON.stringify({version:2, id:S.id, title:S.title, folder:S.folder, name:S.name, brief:S.brief, target:S.target, depth:S.depth,
+    rounds:S.rounds, slots:S.slots, prompt:S.prompt, notes:S.notes, change:S.change, versions:S.versions, followups:S.followups, created:S.created, updated:S.updated}, null, 2);
+  const args = {folder:S.folder, name:S.name, record_json:record, markdown:toMarkdown()};
+  if(S.path && S.path !== S.folder+"/"+S.name) args.previous_path = S.path;
+  try{
+    const res = await mcp.callTool(FOLDER_SRV, "save_prompt", args, {cache:false});
+    let p=res.payload; if(typeof p==="string"){ try{ p=JSON.parse(p); }catch{} }
+    S.path = (p && p.path) || (S.folder+"/"+S.name);
+    setChip("ok", (p && p.moved ? "Moved and saved · " : "Saved · ") + S.path.replace("/", " / "));
+    renderPrompt(); renderFolderSel(); saveLocal();
+    refreshLibrary();
+  }catch(e){
+    const msg = folderErrCopy(e) + (e?.code && e.code!=="tool_error" ? ` (${e.code})` : "");
+    setChip("warn", fromClick && (e?.code==="cancelled"||e?.code==="approval_required") ? `The app didn't approve the save (${e.code}). Click Save to folder again and choose Allow.` : msg);
+    if(args.previous_path){ S.folder = S.path.split("/")[0]; renderFolderSel(); }
+  }
+}
+
+/* ---------- library ---------- */
+async function refreshLibrary(){
+  if(!mcp){ useLocalLibrary("Folder saving works when this page is open in the Claude desktop app. Showing prompts kept in this browser."); return; }
+  try{
+    const res = await mcp.callTool(FOLDER_SRV, "list_prompts", {}, {cache:false});
+    let p = res.payload; if(typeof p==="string"){ try{ p=JSON.parse(p); }catch{} }
+    LIB = { root:p?.folder||LIB.root, folders:Array.isArray(p?.folders)?p.folders:[], prompts:Array.isArray(p?.prompts)?p.prompts:[], source:"folder", msg:"" };
+  }catch(e){ useLocalLibrary(folderErrCopy(e)+" Showing prompts kept in this browser."); return; }
+  afterLibrary();
+}
+function useLocalLibrary(msg){
+  const list=loadLocal();
+  LIB = { root:"This browser", folders:[...new Set(list.map(x=>x.folder||"General"))],
+    prompts:list.map(x=>({path:x.path||"", folder:x.folder||"General", name:x.name||"", title:x.title||x.brief?.slice(0,60)||"Untitled", target:x.target, updated:x.updated, followups:(x.followups||[]).length, revisions:(x.versions||[]).length, _local:x})),
+    source:"local", msg };
+  afterLibrary();
+}
+function afterLibrary(){
+  $("libCount").textContent = LIB.prompts.length ? " "+LIB.prompts.length : "";
+  $("libPath").textContent = LIB.root; $("recentPath").textContent = LIB.root;
+  const fsel=$("libFolder"), cur=fsel.value; fsel.textContent="";
+  const all=document.createElement("option"); all.value=""; all.textContent="All folders"; fsel.append(all);
+  LIB.folders.forEach(f=>{ const o=document.createElement("option"); o.value=f; o.textContent=f; fsel.append(o); });
+  fsel.value = LIB.folders.includes(cur) ? cur : "";
+  renderFolderSel(); renderLibrary(); renderRecent();
+}
+function metaLine(p){
+  const bits=[fmtTime(p.updated)];
+  if(p.target && p.target!=="auto") bits.push(TARGET_SHORT[p.target]||p.target);
+  if(p.revisions) bits.push(`v${p.revisions+1}`);
+  if(p.followups) bits.push(`${p.followups} follow-up${p.followups>1?"s":""}`);
+  return bits.filter(Boolean).join(" · ");
+}
+function renderLibrary(){
+  const q=$("libSearch").value.trim().toLowerCase(), only=$("libFolder").value;
+  const box=$("libList"); box.textContent="";
+  const match = p => (!only || p.folder===only) && (!q || [p.title,p.folder,p.name].join(" ").toLowerCase().includes(q));
+  const shown = LIB.prompts.filter(match);
+  let msg = LIB.msg || "";
+  if(!msg && LIB.source==="folder" && !LIB.prompts.length) msg = "Nothing saved yet. Build a prompt in the Workspace and it's filed here automatically.";
+  if(!msg && LIB.prompts.length && !shown.length) msg = "No saved prompts match that search.";
+  $("libMsg").hidden=!msg; $("libMsg").textContent=msg;
+  const folders = only ? [only] : [...new Set([...LIB.folders, ...shown.map(p=>p.folder)])];
+  for(const f of folders){
+    const items = shown.filter(p=>p.folder===f);
+    if(q && !items.length) continue;
+    const g=document.createElement("div"); g.className="group";
+    const h=document.createElement("h3"); h.textContent=f||"General";
+    const c=document.createElement("span"); c.className="meta"; c.textContent=items.length+(items.length===1?" prompt":" prompts"); h.append(c);
+    g.append(h);
+    if(!items.length){ const e=document.createElement("p"); e.className="emptyline"; e.textContent="No prompts in this folder yet."; g.append(e); }
+    for(const p of items){
+      const row=document.createElement("div"); row.className="lrow";
+      row.setAttribute("aria-current", String(!!S.path && p.path===S.path));
+      const info=document.createElement("div"); info.className="info";
+      const open=document.createElement("button"); open.type="button"; open.className="open"; open.textContent=p.title||p.name;
+      open.onclick=()=>openPast(p,"open");
+      const m=document.createElement("span"); m.className="meta"; m.textContent=metaLine(p);
+      info.append(open,m);
+      const acts=document.createElement("div"); acts.className="acts";
+      const rv=document.createElement("button"); rv.type="button"; rv.className="btn small"; rv.textContent="Revise"; rv.onclick=()=>openPast(p,"revise");
+      const fu=document.createElement("button"); fu.type="button"; fu.className="btn ghost small"; fu.textContent="Follow up"; fu.onclick=()=>openPast(p,"followup");
+      acts.append(rv,fu);
+      row.append(info,acts); g.append(row);
+    }
+    box.append(g);
+  }
+}
+$("libSearch").addEventListener("input", renderLibrary);
+$("libFolder").addEventListener("change", renderLibrary);
+$("refreshBtn").onclick=refreshLibrary;
+function renderRecent(){
+  const ul=$("recentList"); ul.textContent="";
+  const top=LIB.prompts.slice(0,5);
+  if(!top.length){ const li=document.createElement("li"); li.className="meta"; li.textContent="Saved prompts show up here."; ul.append(li); return; }
+  top.forEach(p=>{ const li=document.createElement("li"), b=document.createElement("button"); b.type="button";
+    const t=document.createElement("span"); t.className="t"; t.textContent=p.title||p.name;
+    const m=document.createElement("span"); m.className="m"; m.textContent=(p.folder||"General")+" · "+fmtTime(p.updated);
+    b.append(t,m); b.onclick=()=>openPast(p,"open"); li.append(b); ul.append(li); });
+}
+async function openPast(p, how){
+  let r = p._local;
+  if(!r){
+    try{
+      const res = await mcp.callTool(FOLDER_SRV, "read_prompt", {path:p.path}, {cache:false});
+      r = res.payload; if(typeof r==="string") r=JSON.parse(r);
+    }catch(e){ LIB.msg = "Couldn't open that prompt: " + (e?.message || folderErrCopy(e)); renderLibrary(); return; }
+  }
+  loadRecord(r, p.path);
+  showTab("work");
+  const target = how==="followup" ? $("fCard") : $("pCard");
+  target.scrollIntoView({behavior:smooth(), block:"start"});
+  if(how==="revise") $("refine").focus({preventScroll:true});
+  if(how==="followup") $("fInput").focus({preventScroll:true});
+}
+function loadRecord(r, path){
+  Object.assign(S, blank(), r);
+  S.rounds=Array.isArray(r.rounds)?r.rounds:[]; S.followups=Array.isArray(r.followups)?r.followups:[];
+  S.notes=Array.isArray(r.notes)?r.notes:[]; S.versions=Array.isArray(r.versions)?r.versions:[]; S.slots=r.slots||{};
+  S.path = path || r.path || "";
+  if(S.path){ const [f,n]=S.path.split("/"); S.folder=f; S.name=n; }
+  if(!S.folder) S.folder="General";
+  if(!S.name && r.file) S.name=r.file;
+  if(!S.id) S.id=rid();
+  $("brief").value=S.brief; $("target").value=S.target in TARGETS?S.target:"auto"; $("depth").value=S.depth in DEPTH?S.depth:"balanced";
+  renderMap(); renderQuestions(false); renderPrompt(); renderThread(); renderFolderSel();
+  $("pCard").hidden=!S.prompt; $("fCard").hidden=!S.prompt;
+  ["briefErr","qErr","pErr","fErr"].forEach(i=>$(i).hidden=true);
+  setStep(S.followups.length?3:S.prompt?2:S.rounds.length?1:0);
+  setChip(S.path?"ok":"", S.path ? "Opened · "+S.path.replace("/"," / ") : "");
+}
+
+/* ---------- this-browser copy ---------- */
+const HKEY="ca_sessions_v3", DKEY="ca_draft_v1";
+function loadLocal(){ try{ return JSON.parse(localStorage.getItem(HKEY)||"[]"); }catch{ return []; } }
+function saveLocal(){
+  const list=loadLocal().filter(x=>x.id!==S.id);
+  list.unshift(JSON.parse(JSON.stringify(S)));
+  try{ localStorage.setItem(HKEY, JSON.stringify(list.slice(0,20))); }catch{}
+  if(LIB.source==="local") useLocalLibrary(LIB.msg);
+}
+function saveDraft(){ try{ localStorage.setItem(DKEY, JSON.stringify({brief:$("brief").value})); }catch{} }
+
+/* ---------- copy ---------- */
+async function copyText(text, btn, label, selEl){
+  try{ await navigator.clipboard.writeText(text); btn.textContent="Copied"; }
+  catch{ if(selEl){ const r=document.createRange(); r.selectNodeContents(selEl); getSelection().removeAllRanges(); getSelection().addRange(r); } btn.textContent="Selected, press Ctrl+C"; }
+  setTimeout(()=>btn.textContent=label,1800);
+}
+$("copyBtn").onclick=e=>copyText(S.prompt||$("prompt").textContent, e.currentTarget, "Copy prompt", $("prompt"));
+$("copyMeta").onclick=e=>copyText($("meta").textContent, e.currentTarget, "Copy instructions", $("meta"));
+
+/* ---------- wiring ---------- */
+function readBrief(){
+  const b=$("brief").value.trim();
+  if(!b){ $("briefErr").textContent="Describe what you're trying to do first."; $("briefErr").hidden=false; $("brief").focus(); return false; }
+  Object.assign(S, blank(), {brief:b, target:$("target").value, depth:$("depth").value});
+  $("pCard").hidden=true; $("fCard").hidden=true; $("qCard").hidden=true; renderThread(); setChip("",""); renderMap(); renderFolderSel();
+  return true;
+}
+document.querySelectorAll(".ex").forEach(b=>b.onclick=()=>{ $("brief").value=b.textContent; $("brief").focus(); });
+$("startBtn").onclick=()=>{ if(readBrief()) runInterview(); };
+$("skipBtn").onclick=()=>{ if(readBrief()) runBuild("build"); };
+$("moreBtn").onclick=()=>runInterview();
+$("buildBtn").onclick=()=>runBuild("build");
+$("refineBtn").onclick=()=>runBuild("revise");
+$("refine").addEventListener("keydown",e=>{ if(e.key==="Enter") runBuild("revise"); });
+$("fBtn").onclick=runFollowup;
+$("fInput").addEventListener("keydown",e=>{ if(e.key==="Enter" && (e.ctrlKey||e.metaKey)) runFollowup(); });
+$("restartBtn").onclick=()=>{ Object.assign(S, blank()); $("brief").value="";
+  ["qCard","pCard","fCard"].forEach(i=>$(i).hidden=true); renderThread(); setChip("",""); renderMap(); renderFolderSel(); setStep(0);
+  $("briefCard").scrollIntoView({behavior:smooth(), block:"start"}); $("brief").focus({preventScroll:true}); saveDraft(); renderLibrary(); };
+$("brief").addEventListener("input", saveDraft);
+
+$("meta").textContent = `You are a context engineer. I'll tell you roughly what I'm trying to do. Don't write anything yet.
+
+1. Restate my goal in 2 sentences so I can confirm you understood.
+2. Ask me 5-6 specific questions, one short list, about whatever is missing among: goal and why, audience, inputs/materials, constraints, output format, tone/examples, and how I'll judge success. Offer 2-4 answer options for each so I can answer fast.
+3. If my answers leave important gaps, ask up to 3 follow-ups.
+4. Then write the final prompt: a domain-specific role, the full context organized with XML tags (<context>, <task>, <constraints>, <output_format>, <examples>), ordered steps where order matters, the reason behind non-obvious rules, {{placeholders}} for anything that changes per use, and stated defaults for anything I skipped.
+5. After the prompt, list what I need to fill in and which defaults you assumed. Then suggest 3 follow-up questions I could ask to go deeper.
+
+My goal: `;
+
+try{ const d=JSON.parse(localStorage.getItem(DKEY)||"{}"); if(d.brief) $("brief").value=d.brief; }catch{}
+renderMap(); renderFolderSel(); renderRecent();
+
+(async()=>{
+  if(!window.claude){ $("unavail").hidden=false; ["startBtn","skipBtn"].forEach(i=>$(i).disabled=true); document.querySelector(".anywhere details").open=true; useLocalLibrary("Open this page in the Claude desktop app to see your folder."); return; }
+  const [s, m] = await Promise.all([window.claude.use("sample"), window.claude.use("mcp")]);
+  sample = s; mcp = m;
+  if(!sample){ $("unavail").hidden=false; ["startBtn","skipBtn","fBtn","refineBtn"].forEach(i=>$(i).disabled=true); document.querySelector(".anywhere details").open=true; }
+  refreshLibrary();
+})();
+</script>
