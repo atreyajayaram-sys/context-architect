@@ -85,6 +85,13 @@ select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px 
 .ptop{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;align-items:baseline}
 .crumb{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 pre.prompt{font-family:var(--mono);font-size:13.5px;line-height:1.6;background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:16px;white-space:pre-wrap;word-wrap:break-word;margin:0;max-height:70vh;overflow:auto;min-height:80px}
+textarea.prompt-edit{font-family:var(--mono);font-size:13.5px;line-height:1.6;min-height:340px;background:var(--panel);border-color:var(--accent)}
+.hint{font-size:13px;color:var(--muted);margin:10px 0 0;max-width:72ch}
+.blanks{margin-top:16px;border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--code-bg)}
+.blanks summary{font-size:14px}
+.bfields{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.bfields label{display:flex;flex-direction:column;gap:4px;font-family:var(--mono);font-size:12px;color:var(--muted);min-width:0}
+.bfields textarea{min-height:44px;font-family:var(--body);font-size:14px;padding:8px 10px;background:var(--panel)}
 .notes{margin:14px 0 0;padding-left:20px;color:var(--muted);font-size:14px}
 .notes li{margin-bottom:4px}
 .meta{font-family:var(--mono);font-size:12px;color:var(--muted)}
@@ -226,11 +233,30 @@ details summary{cursor:pointer;font-weight:600}
           <div class="ptop"><h2 id="pTitle">Your prompt</h2><span class="crumb" id="crumb"></span></div>
           <p class="sub">Anything in <code>{{double_braces}}</code> is a slot to fill each time you use it.</p>
           <pre class="prompt" id="prompt" tabindex="0"></pre>
-          <div class="actions">
+          <textarea class="prompt-edit" id="promptEdit" aria-label="Edit the prompt" hidden></textarea>
+          <div class="actions" id="viewActs">
             <button class="btn primary" id="copyBtn" type="button">Copy prompt</button>
+            <button class="btn ghost" id="editBtn" type="button">Edit text</button>
             <span class="meta" id="pMeta"></span>
             <div class="status" id="pStatus" hidden><span class="dot"></span><span>Writing…</span><button class="btn ghost small" type="button" data-stop>Stop</button></div>
           </div>
+          <div class="actions" id="editActs" hidden>
+            <button class="btn primary" id="saveEditBtn" type="button">Save edit</button>
+            <button class="btn ghost" id="cancelEditBtn" type="button">Cancel</button>
+            <span class="meta">Your edit becomes a new version. The old one stays under Earlier versions.</span>
+          </div>
+          <p class="hint">Copy puts plain text on your clipboard. Some chat apps, Claude included, turn a long paste into an attachment you can't edit, so make your changes here before you copy.</p>
+
+          <details class="blanks" id="blanks" open hidden>
+            <summary id="blanksSummary">Fill in the blanks</summary>
+            <p class="sub" style="margin:8px 0 12px">Type what goes in each <code>{{slot}}</code>. Leave one empty to keep the placeholder.</p>
+            <div class="bfields" id="blankFields"></div>
+            <div class="actions">
+              <button class="btn primary" id="copyFilledBtn" type="button">Copy filled prompt</button>
+              <button class="btn ghost" id="clearBlanksBtn" type="button">Clear</button>
+              <span class="meta" id="blanksMeta"></span>
+            </div>
+          </details>
           <ul class="notes" id="notes"></ul>
 
           <div class="folderrow">
@@ -564,7 +590,7 @@ async function runBuild(kind){
     change=$("refine").value.trim(); if(!change){ $("refine").focus(); return; }
     input=revisePrompt(change);
   } else { collectAnswers(); input=buildPrompt(); }
-  showTab("work");
+  showTab("work"); endEdit(); $("blanks").hidden=true;
   $("pCard").hidden=false; setStep(2);
   ["briefErr","qErr","pErr"].forEach(i=>$(i).hidden=true);
   const pre=$("prompt");
@@ -599,8 +625,66 @@ function renderPrompt(truncated){
   const v = S.versions.length+1;
   $("pMeta").textContent = S.prompt ? `v${v} · ${S.prompt.split(/\s+/).length} words`+(truncated?" · cut short, ask for a shorter version":"") : "";
   $("crumb").textContent = S.path ? S.path.replace("/", " / ") : (S.folder ? S.folder+" / (not saved yet)" : "");
-  renderVersions();
+  renderVersions(); endEdit(); renderBlanks();
 }
+
+/* ---------- edit in place ---------- */
+function startEdit(){
+  if(!S.prompt) return;
+  $("promptEdit").value=S.prompt;
+  $("prompt").hidden=true; $("promptEdit").hidden=false;
+  $("viewActs").hidden=true; $("editActs").hidden=false; $("blanks").hidden=true;
+  $("promptEdit").focus();
+}
+function endEdit(){
+  $("prompt").hidden=false; $("promptEdit").hidden=true;
+  $("viewActs").hidden=false; $("editActs").hidden=true;
+}
+function saveEdit(){
+  const t=$("promptEdit").value.trim();
+  if(!t){ $("promptEdit").focus(); return; }
+  if(t===S.prompt){ endEdit(); renderBlanks(); return; }
+  S.versions.push({prompt:S.prompt, notes:S.notes, change:S.change||"First version", at:S.updated||new Date().toISOString()});
+  S.prompt=t; S.change="Edited by hand";
+  renderPrompt(); saveSession(true);
+}
+$("editBtn").onclick=startEdit;
+$("saveEditBtn").onclick=saveEdit;
+$("cancelEditBtn").onclick=()=>{ endEdit(); renderBlanks(); };
+
+/* ---------- fill in the blanks ---------- */
+const SLOT_RE = /\{\{\s*([^{}\n]{1,60}?)\s*\}\}/g;
+let FILLS = {}, FILLS_FOR = null;
+function slotNames(){ return [...new Set([...S.prompt.matchAll(SLOT_RE)].map(m=>m[1].trim()))]; }
+function filledPrompt(){ return S.prompt.replace(SLOT_RE, (m,name)=>{ const v=(FILLS[name.trim()]||"").trim(); return v || m; }); }
+function updateBlanksMeta(names){
+  const done = names.filter(n=>(FILLS[n]||"").trim()).length;
+  $("blanksMeta").textContent = `${done} of ${names.length} filled`;
+}
+function renderBlanks(){
+  const key = S.id || S.created || "draft";
+  if(FILLS_FOR!==key){ FILLS={}; FILLS_FOR=key; }
+  const names = S.prompt ? slotNames() : [];
+  $("blanks").hidden = !names.length;
+  if(!names.length) return;
+  $("blanksSummary").textContent = `Fill in the blanks (${names.length})`;
+  const box=$("blankFields"); box.textContent="";
+  names.forEach((n,i)=>{
+    const lab=document.createElement("label"); lab.htmlFor="blank_"+i; lab.textContent="{{"+n+"}}";
+    const ta=document.createElement("textarea"); ta.id="blank_"+i; ta.rows=1; ta.value=FILLS[n]||"";
+    ta.placeholder = n.replace(/[_-]+/g," ");
+    ta.addEventListener("input", ()=>{ FILLS[n]=ta.value; updateBlanksMeta(names); });
+    lab.append(ta); box.append(lab);
+  });
+  updateBlanksMeta(names);
+}
+$("copyFilledBtn").onclick=async e=>{
+  const btn=e.currentTarget, text=filledPrompt();
+  try{ await navigator.clipboard.writeText(text); btn.textContent="Copied"; }
+  catch{ startEdit(); $("promptEdit").value=text; $("promptEdit").select(); btn.textContent="Selected below, press Ctrl+C"; }
+  setTimeout(()=>btn.textContent="Copy filled prompt",1800);
+};
+$("clearBlanksBtn").onclick=()=>{ FILLS={}; renderBlanks(); };
 function renderVersions(){
   const n=S.versions.length; $("versions").hidden=!n;
   $("vSummary").textContent = `Earlier versions (${n})`;

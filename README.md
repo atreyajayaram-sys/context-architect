@@ -11,7 +11,8 @@ Most prompts fail because the model is missing context, not because the wording 
 - **Interview first.** Describe your goal in a sentence. Claude restates it, then asks 3–8 specific questions, each with clickable answer options. You can skip any question and it will pick a sensible default.
 - **Context map.** Tracks the seven things a model needs: goal, audience, inputs, constraints, output format, tone and examples, and success criteria. Each shows as filled, partial or missing.
 - **Prompts you can reuse.** The output has a domain-specific role, structured sections (XML tags for LLMs, a dense description for image models), ordered steps, the reasons behind its rules, and `{{placeholders}}` for anything that changes each time you use it.
-- **Revisions with history.** Ask for changes in plain words ("shorter", "add two examples"). Every earlier version is kept and can be restored.
+- **Revisions with history.** Ask for changes in plain words ("shorter", "add two examples"), or click **Edit text** and change the prompt yourself. Every earlier version is kept and can be restored.
+- **Fill in the blanks.** Every `{{slot}}` in the prompt gets its own input box. Fill them in and click **Copy filled prompt** to get plain text that's ready to send. Finishing edits here helps because some chat apps turn long pastes into an attachment you can't edit.
 - **Follow-ups you can keep using.** Keep researching the same task: *Research deeper*, *New variant prompt*, *Stress-test the prompt* or *Next-step prompt*. Each answer builds on every earlier one and suggests three questions to ask next.
 - **Organized on disk.** Prompts are saved as `Topic folder / prompt name / prompt.md + session.json`. Claude suggests the topic folder, and you can move a prompt to another folder at any time.
 - **Library.** Search every saved prompt by folder, then click **Revise** or **Follow up** to pick up where you left off.
